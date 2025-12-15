@@ -8,7 +8,7 @@ app.use(express.json());
 
 // MongoDB Atlas connection (use your credentials)
 mongoose.connect(
-  "mongodb+srv://tonyjanson121_db_user:U0YCm60pRdPbkFpE@cluster0.abcd.mongodb.net/portfolioDB",
+  "mongodb+srv://tonyjanson121_db_user:iOSNG2PYFzRANqRh@cluster0.wyx2ymq.mongodb.net/?appName=Cluster0",
   { useNewUrlParser: true, useUnifiedTopology: true }
 )
 .then(() => console.log("MongoDB connected"))
