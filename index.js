@@ -1,10 +1,23 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const multer = require("multer");
+const path = require("path");
 
-const app = express();
+const app = express(); // define app first
+
 app.use(cors());
 app.use(express.json());
+
+// Make the uploads folder publicly accessible
+app.use("/uploads", express.static("uploads"));
+
+// --- Multer setup ---
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+});
+const upload = multer({ storage });
 
 // --- MongoDB Connection ---
 mongoose.connect(
@@ -18,7 +31,8 @@ mongoose.connect(
 const Resource = mongoose.model("Resource", {
   title: String,
   category: String,
-  description: String
+  description: String,
+  fileUrl: String
 });
 
 const Project = mongoose.model("Project", {
@@ -47,20 +61,26 @@ const Message = mongoose.model("Message", {
   read: { type: Boolean, default: false }
 });
 
-// --- Resources Routes ---
+// --- Routes ---
+// Resources
 app.get("/resources", async (req, res) => {
   const resources = await Resource.find();
   res.json(resources);
 });
 
-app.post("/resources", async (req, res) => {
-  const resource = new Resource(req.body);
+app.post("/resources", upload.single("file"), async (req, res) => {
+  const { title, category, description } = req.body;
+  const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
+  const resource = new Resource({ title, category, description, fileUrl });
   await resource.save();
   res.json({ message: "Resource added", resource });
 });
 
-app.put("/resources/:id", async (req, res) => {
-  const updated = await Resource.findByIdAndUpdate(req.params.id, req.body, { new: true });
+app.put("/resources/:id", upload.single("file"), async (req, res) => {
+  const { title, category, description } = req.body;
+  const updateData = { title, category, description };
+  if (req.file) updateData.fileUrl = `/uploads/${req.file.filename}`;
+  const updated = await Resource.findByIdAndUpdate(req.params.id, updateData, { new: true });
   res.json({ message: "Resource updated", resource: updated });
 });
 
@@ -69,7 +89,7 @@ app.delete("/resources/:id", async (req, res) => {
   res.json({ message: "Resource deleted" });
 });
 
-// --- Projects Routes ---
+// Projects
 app.get("/projects", async (req, res) => {
   const projects = await Project.find();
   res.json(projects);
@@ -91,7 +111,7 @@ app.delete("/projects/:id", async (req, res) => {
   res.json({ message: "Project deleted" });
 });
 
-// --- Profile Routes ---
+// Profile
 app.get("/profile", async (req, res) => {
   const profile = await Profile.findOne();
   res.json(profile);
@@ -109,7 +129,7 @@ app.put("/profile", async (req, res) => {
   res.json({ message: "Profile updated", profile });
 });
 
-// --- Messages Routes ---
+// Messages
 app.get("/messages", async (req, res) => {
   const messages = await Message.find();
   res.json(messages);
@@ -131,6 +151,6 @@ app.delete("/messages/:id", async (req, res) => {
   res.json({ message: "Message deleted" });
 });
 
-// --- Start Server ---
+// Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
