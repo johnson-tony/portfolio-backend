@@ -4,38 +4,35 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
-require("dotenv").config(); // For environment variables
+require("dotenv").config();
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Serve uploads folder publicly
 app.use("/uploads", express.static("uploads"));
 
-// --- Multer setup for file uploads ---
+// ---------------- Multer ----------------
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+  filename: (req, file, cb) =>
+    cb(null, Date.now() + path.extname(file.originalname)),
 });
 const upload = multer({ storage });
 
-// --- MongoDB Connection ---
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log("MongoDB connected"))
-.catch(err => console.error("MongoDB connection error:", err));
+// ---------------- MongoDB ----------------
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB error:", err));
 
-// --- Schemas ---
+// ---------------- Schemas ----------------
 const Resource = mongoose.model("Resource", {
   title: String,
   category: String,
   description: String,
-  fileUrl: String
+  fileUrl: String,
 });
 
 const Project = mongoose.model("Project", {
@@ -43,23 +40,23 @@ const Project = mongoose.model("Project", {
   problem: String,
   decision: String,
   tradeoff: String,
-  outcome: String
+  outcome: String,
 });
 
-const Profile = mongoose.model("Profile", {
-  fullName: String,
-  role: String,
-  about: String,
-  currentFocus: String,
-  skills: String,
-  linkedin: String,
-  github: String,
-  email: String
+const ProfileSchema = new mongoose.Schema({
+  fullName: { type: String, default: "" },
+  role: { type: String, default: "" },
+  about: { type: String, default: "" },
+  currentFocus: { type: String, default: "" },
+  skills: { type: String, default: "" },
+  linkedin: { type: String, default: "" },
+  github: { type: String, default: "" },
+  email: { type: String, default: "" },
 });
 
-// --- Routes ---
+const Profile = mongoose.model("Profile", ProfileSchema);
 
-// Resources CRUD
+// ---------------- Resources ----------------
 app.get("/resources", async (req, res) => {
   const resources = await Resource.find();
   res.json(resources);
@@ -68,17 +65,29 @@ app.get("/resources", async (req, res) => {
 app.post("/resources", upload.single("file"), async (req, res) => {
   const { title, category, description } = req.body;
   const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
-  const resource = new Resource({ title, category, description, fileUrl });
+
+  const resource = new Resource({
+    title,
+    category,
+    description,
+    fileUrl,
+  });
+
   await resource.save();
-  res.json({ message: "Resource added", resource });
+  res.json(resource);
 });
 
 app.put("/resources/:id", upload.single("file"), async (req, res) => {
-  const { title, category, description } = req.body;
-  const updateData = { title, category, description };
+  const updateData = req.body;
   if (req.file) updateData.fileUrl = `/uploads/${req.file.filename}`;
-  const updated = await Resource.findByIdAndUpdate(req.params.id, updateData, { new: true });
-  res.json({ message: "Resource updated", resource: updated });
+
+  const updated = await Resource.findByIdAndUpdate(
+    req.params.id,
+    updateData,
+    { new: true }
+  );
+
+  res.json(updated);
 });
 
 app.delete("/resources/:id", async (req, res) => {
@@ -86,7 +95,7 @@ app.delete("/resources/:id", async (req, res) => {
   res.json({ message: "Resource deleted" });
 });
 
-// Projects CRUD
+// ---------------- Projects ----------------
 app.get("/projects", async (req, res) => {
   const projects = await Project.find();
   res.json(projects);
@@ -95,12 +104,16 @@ app.get("/projects", async (req, res) => {
 app.post("/projects", async (req, res) => {
   const project = new Project(req.body);
   await project.save();
-  res.json({ message: "Project added", project });
+  res.json(project);
 });
 
 app.put("/projects/:id", async (req, res) => {
-  const updated = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json({ message: "Project updated", project: updated });
+  const updated = await Project.findByIdAndUpdate(
+    req.params.id,
+    req.body,
+    { new: true }
+  );
+  res.json(updated);
 });
 
 app.delete("/projects/:id", async (req, res) => {
@@ -108,24 +121,33 @@ app.delete("/projects/:id", async (req, res) => {
   res.json({ message: "Project deleted" });
 });
 
-// Profile CRUD (single profile)
+// ---------------- Profile (FIXED) ----------------
+
+// GET profile (always returns object)
 app.get("/profile", async (req, res) => {
-  const profile = await Profile.findOne();
+  let profile = await Profile.findOne();
+
+  if (!profile) {
+    profile = new Profile({});
+    await profile.save();
+  }
+
   res.json(profile);
 });
 
-app.post("/profile", async (req, res) => {
-  await Profile.deleteMany(); // Ensure only 1 profile
-  const profile = new Profile(req.body);
-  await profile.save();
-  res.json({ message: "Profile saved", profile });
-});
-
+// UPDATE / CREATE profile
 app.put("/profile", async (req, res) => {
-  const profile = await Profile.findOneAndUpdate({}, req.body, { new: true });
-  res.json({ message: "Profile updated", profile });
+  const profile = await Profile.findOneAndUpdate(
+    {},
+    req.body,
+    { new: true, upsert: true }
+  );
+
+  res.json(profile);
 });
 
-// --- Start server ---
+// ---------------- Server ----------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`Backend running on port ${PORT}`)
+);
