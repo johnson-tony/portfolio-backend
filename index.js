@@ -4,21 +4,30 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 require("dotenv").config();
 
 const app = express();
 
-// Middleware
+// ---------------- Middleware ----------------
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
 
-// ---------------- Multer ----------------
+// Serve uploaded files
+app.use("/uploads", express.static("/tmp/uploads/"));
+
+// ---------------- Ensure Upload Folder Exists ----------------
+const uploadDir = "/tmp/uploads/";
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// ---------------- Multer Setup ----------------
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname)),
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
 });
+
 const upload = multer({ storage });
 
 // ---------------- MongoDB ----------------
@@ -57,42 +66,58 @@ const ProfileSchema = new mongoose.Schema({
 const Profile = mongoose.model("Profile", ProfileSchema);
 
 // ---------------- Resources ----------------
+// Get all resources
 app.get("/resources", async (req, res) => {
-  const resources = await Resource.find();
-  res.json(resources);
+  try {
+    const resources = await Resource.find();
+    res.json(resources);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch resources" });
+  }
 });
 
+// Add new resource
 app.post("/resources", upload.single("file"), async (req, res) => {
-  const { title, category, description } = req.body;
-  const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
+  try {
+    const { title, category, description } = req.body;
+    const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-  const resource = new Resource({
-    title,
-    category,
-    description,
-    fileUrl,
-  });
-
-  await resource.save();
-  res.json(resource);
+    const resource = new Resource({ title, category, description, fileUrl });
+    await resource.save();
+    res.json(resource);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to add resource" });
+  }
 });
 
+// Update resource
 app.put("/resources/:id", upload.single("file"), async (req, res) => {
-  const updateData = req.body;
-  if (req.file) updateData.fileUrl = `/uploads/${req.file.filename}`;
+  try {
+    const updateData = req.body;
+    if (req.file) updateData.fileUrl = `/uploads/${req.file.filename}`;
 
-  const updated = await Resource.findByIdAndUpdate(
-    req.params.id,
-    updateData,
-    { new: true }
-  );
+    const updated = await Resource.findByIdAndUpdate(req.params.id, updateData, { new: true });
 
-  res.json(updated);
+    if (!updated) return res.status(404).json({ message: "Resource not found" });
+
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update resource" });
+  }
 });
 
+// Delete resource
 app.delete("/resources/:id", async (req, res) => {
-  await Resource.findByIdAndDelete(req.params.id);
-  res.json({ message: "Resource deleted" });
+  try {
+    await Resource.findByIdAndDelete(req.params.id);
+    res.json({ message: "Resource deleted" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to delete resource" });
+  }
 });
 
 // ---------------- Projects ----------------
@@ -108,11 +133,7 @@ app.post("/projects", async (req, res) => {
 });
 
 app.put("/projects/:id", async (req, res) => {
-  const updated = await Project.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { new: true }
-  );
+  const updated = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true });
   res.json(updated);
 });
 
@@ -121,33 +142,31 @@ app.delete("/projects/:id", async (req, res) => {
   res.json({ message: "Project deleted" });
 });
 
-// ---------------- Profile (FIXED) ----------------
-
-// GET profile (always returns object)
+// ---------------- Profile ----------------
 app.get("/profile", async (req, res) => {
-  let profile = await Profile.findOne();
-
-  if (!profile) {
-    profile = new Profile({});
-    await profile.save();
+  try {
+    let profile = await Profile.findOne();
+    if (!profile) {
+      profile = new Profile({});
+      await profile.save();
+    }
+    res.json(profile);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch profile" });
   }
-
-  res.json(profile);
 });
 
-// UPDATE / CREATE profile
 app.put("/profile", async (req, res) => {
-  const profile = await Profile.findOneAndUpdate(
-    {},
-    req.body,
-    { new: true, upsert: true }
-  );
-
-  res.json(profile);
+  try {
+    const profile = await Profile.findOneAndUpdate({}, req.body, { new: true, upsert: true });
+    res.json(profile);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
 });
 
 // ---------------- Server ----------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`Backend running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
